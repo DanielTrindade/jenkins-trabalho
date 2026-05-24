@@ -1,0 +1,17 @@
+{
+  "name": "temperature-converter-api",
+  "version": "1.0.0",
+  "description": "API Node.js simples com dois endpoints de conversão de temperatura para atividade de Jenkins.",
+  "private": true,
+  "type": "commonjs",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node src/server.js",
+    "check": "node --check src/conversion-service.js && node --check src/app.js && node --check src/server.js && node --check test/app.test.js && node --check scripts/run-tests-ci.js && node --check scripts/run-coverage.js",
+    "test": "node --test",
+    "test:ci": "node scripts/run-tests-ci.js",
+    "test:coverage": "node scripts/run-coverage.js"
+  }
+}
