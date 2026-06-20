@@ -1,36 +1,48 @@
-# Cenários para a atividade de Jenkins
+# Cenários para a atividade de Jenkins (Trabalho 2 — com Docker)
 
-## Cenário 1 — build e testes com sucesso
+No Trabalho 2 o pipeline roda o **build em um container Docker** e os **testes em
+outro container Docker isolado**. Veja [arquitetura-docker.md](arquitetura-docker.md)
+para entender o fluxo completo. Cada cenário abaixo descreve o resultado esperado
+já nesse contexto de containers.
 
-Execute o pipeline com o código como está.
+## Cenário 1 — build e testes com sucesso ("tudo certo!")
+
+Execute o pipeline (job manual) com o código como está.
 
 Resultado esperado:
 
-- `npm run check` passa;
-- `npm run test:coverage` passa;
-- o Jenkins publica `reports/junit.xml`;
-- o Jenkins também gera `reports/lcov.info`;
+- o **container de build** sobe, roda `npm ci` e `npm run check` com sucesso;
+- o artefato validado é empacotado (`stash`);
+- o **container de teste** sobe separado, recupera o artefato (`unstash`) e roda
+  `npm run test:coverage` com sucesso;
+- o Jenkins publica `reports/junit.xml` e arquiva `reports/lcov.info`;
 - o build termina como `SUCCESS`.
 
-## Cenário 2 — falha na compilação
+No log dá para ver dois `hostname` diferentes — um por container — provando o
+isolamento.
 
-Como o projeto é JavaScript puro, a etapa equivalente à compilação é a validação de sintaxe com `node --check`.
+## Cenário 2 — falha na compilação ("deu ruim!")
 
-Para provocar a falha:
+Como o projeto é JavaScript puro, a etapa equivalente à compilação é a validação
+de sintaxe com `node --check`, executada **dentro do container de build**.
+
+Para provocar a falha (em `src/app.js`, por exemplo):
 
 - remova uma chave `}`;
 - quebre a assinatura de uma função;
-- deixe uma vírgula ou parêntese faltando em `src/app.js`.
+- deixe uma vírgula ou parêntese faltando.
 
 Resultado esperado:
 
-- `npm run check` falha;
-- a etapa de testes nem precisa executar;
+- `npm run check` falha **dentro do container de build**;
+- como o `stash` só ocorre no sucesso do build, o **container de teste nem chega
+  a ser criado**;
 - o Jenkins marca o build como `FAILURE`.
 
-## Cenário 3 — build com sucesso, mas testes falhando
+## Cenário 3 — build com sucesso, mas testes falhando ("tá instável!")
 
-Mantenha a sintaxe válida e altere a regra de negócio.
+Mantenha a sintaxe válida (o build passa) e altere a regra de negócio para
+quebrar um caso de teste.
 
 Sugestões:
 
@@ -39,38 +51,53 @@ Sugestões:
 
 Resultado esperado:
 
-- `npm run check` continua passando;
-- `npm run test:coverage` falha;
-- o relatório JUnit é publicado;
+- o **container de build** passa normalmente e gera o artefato;
+- o **container de teste** sobe, roda os testes e um caso falha;
+- o `catchError(buildResult: 'UNSTABLE')` captura a falha;
+- o relatório JUnit é publicado mesmo assim;
 - o Jenkins marca o build como `UNSTABLE`.
 
-## Cenário 4 — build agendado
+## Cenário 4 — build agendado ("o lendário nightly")
 
-O `Jenkinsfile` já define:
+O `Jenkinsfile` já define o gatilho agendado:
 
 ```groovy
 cron('H 8 * * 1-5')
 ```
 
-Você pode manter esse agendamento ou ajustar para um horário mais próximo da gravação.
+Para a demonstração, ajuste para um horário próximo da gravação (por exemplo,
+daqui a alguns minutos) e deixe o Jenkins disparar o job **sozinho**, sem clicar
+em "Build Now". O resultado deve ser build e testes com sucesso, exatamente como
+o Cenário 1 — só que iniciado pelo agendador.
+
+> Dica: o gatilho `cron` só passa a valer depois que o job é salvo/escaneado pelo
+> menos uma vez. Salve o pipeline antes do horário agendado.
 
 ## Bônus — cobertura de código
 
-O projeto já possui o script:
+O artefato de teste já gera, dentro do container de teste:
+
+- `reports/junit.xml`
+- `reports/lcov.info`
+
+via o script:
 
 ```bash
 npm run test:coverage
 ```
 
-Ele gera:
+## Pré-requisitos
 
-- `reports/junit.xml`
-- `reports/lcov.info`
+Antes de rodar qualquer cenário, garanta na máquina do Jenkins:
+
+- Docker Desktop em modo **Linux containers** e rodando;
+- plugin **Docker Pipeline** instalado;
+- permissão do Jenkins para usar o Docker.
 
 ## Branches sugeridas para gravação
 
-- `main`: cenário estável com cobertura ativada
-- `conversion-cenario-build-sucesso`: mesma base da `main`, para gravação isolada do sucesso
-- `conversion-cenario-falha-sintaxe`: falha proposital na etapa de sintaxe
-- `conversion-cenario-testes-falhando`: sintaxe válida, mas teste falhando
-- `conversion-cenario-build-agendado`: sucesso com cron curto para demonstração
+- `main`: cenário estável (build + teste em containers, com sucesso)
+- `conversion-cenario-build-sucesso`: mesma base da `main`, para gravar o sucesso
+- `conversion-cenario-falha-sintaxe`: falha proposital na compilação (Cenário 2)
+- `conversion-cenario-testes-falhando`: build OK, teste falhando (Cenário 3)
+- `conversion-cenario-build-agendado`: sucesso com cron curto para o nightly
