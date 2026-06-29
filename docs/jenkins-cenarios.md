@@ -11,10 +11,10 @@ Execute o pipeline (job manual) com o código como está.
 
 Resultado esperado:
 
-- o **container de build** sobe, roda `npm ci` e `npm run check` com sucesso;
-- o artefato validado é empacotado (`stash`);
-- o **container de teste** sobe separado, recupera o artefato (`unstash`) e roda
-  `npm run test:coverage` com sucesso;
+- o **container de build** sobe (`docker run`), roda `npm ci` e `npm run check`
+  com sucesso;
+- o **container de teste** sobe separado (outro `docker run`), montando o mesmo
+  workspace, e roda `npm run test:coverage` com sucesso;
 - o Jenkins publica `reports/junit.xml` e arquiva `reports/lcov.info`;
 - o build termina como `SUCCESS`.
 
@@ -35,8 +35,8 @@ Para provocar a falha (em `src/app.js`, por exemplo):
 Resultado esperado:
 
 - `npm run check` falha **dentro do container de build**;
-- como o `stash` só ocorre no sucesso do build, o **container de teste nem chega
-  a ser criado**;
+- como o stage de build falhou, o Jenkins **pula o stage de teste** (`Stage
+  "Test" skipped due to earlier failure(s)`) — o segundo `docker run` nem roda;
 - o Jenkins marca o build como `FAILURE`.
 
 ## Cenário 3 — build com sucesso, mas testes falhando ("tá instável!")
@@ -51,7 +51,7 @@ Sugestões:
 
 Resultado esperado:
 
-- o **container de build** passa normalmente e gera o artefato;
+- o **container de build** passa normalmente (`npm run check` ok);
 - o **container de teste** sobe, roda os testes e um caso falha;
 - o `catchError(buildResult: 'UNSTABLE')` captura a falha;
 - o relatório JUnit é publicado mesmo assim;
@@ -91,8 +91,8 @@ npm run test:coverage
 Antes de rodar qualquer cenário, garanta na máquina do Jenkins:
 
 - Docker Desktop em modo **Linux containers** e rodando;
-- plugin **Docker Pipeline** instalado;
-- permissão do Jenkins para usar o Docker.
+- **Docker CLI** acessível ao Jenkins (não é necessário o plugin Docker Pipeline);
+- plugin **Git** para o checkout do repositório.
 
 ## Branches sugeridas para gravação
 

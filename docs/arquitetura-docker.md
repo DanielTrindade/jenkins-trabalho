@@ -12,9 +12,9 @@ adaptação lendo este arquivo de cima a baixo.
 
 ## 1. O que mudou em uma frase
 
-> Antes o Jenkins executava `npm` direto no agente. Agora o Jenkins **pede ao
-> Docker** que suba um container para compilar/validar os fontes e **outro
-> container, separado**, para rodar os casos de teste.
+> Antes o Jenkins executava `npm` direto no agente. Agora cada etapa faz um
+> **`docker run`** próprio: um container sobe para compilar/validar os fontes e
+> **outro container, separado**, sobe para rodar os casos de teste.
 
 ---
 
@@ -44,10 +44,10 @@ o resultado. Não há isolamento entre as etapas.
 ```mermaid
 flowchart TD
     Dev[Desenvolvedor] -->|git push| GH[(GitHub<br/>projeto pessoal)]
-    GH -->|"webhook / manual / cron (nightly)"| J[Jenkins<br/>maquina local]
+    GH -->|"manual / cron (nightly)"| J[Jenkins<br/>maquina local]
 
-    J -->|"agent { docker 'node:22-alpine' }"| BuildC
-    J -->|"agent { docker 'node:22-alpine' }"| TestC
+    J -->|"docker run #1"| BuildC
+    J -->|"docker run #2"| TestC
 
     subgraph Docker["Docker Engine"]
         direction TB
@@ -61,53 +61,86 @@ flowchart TD
         end
     end
 
-    B2 -->|"stash: artefato validado"| ART{{build-artifact}}
-    ART -->|"unstash"| T1
+    WS[(Workspace montado<br/>-v %CD%:/app)]
+    BuildC <-->|le/escreve| WS
+    TestC  <-->|le/escreve| WS
+
     T1 --> R[reports/junit.xml<br/>reports/lcov.info]
     R --> J
     J --> Result["Resultado:<br/>SUCCESS / FAILURE / UNSTABLE"]
 ```
 
 Agora cada etapa roda em um container `node:22-alpine` recém-criado e
-descartado ao final. O build não enxerga o ambiente do teste e vice-versa.
+descartado ao final (`--rm`). O build não enxerga o ambiente do teste e
+vice-versa.
 
 ---
 
-## 3. Como o artefato passa de um container para o outro
+## 3. Como o código e os relatórios passam de um container para o outro
 
-O ponto mais importante da adaptação é o **handoff** entre os dois containers.
-Como eles são isolados, o teste não tem acesso direto ao que o build produziu.
-Resolvemos isso com o mecanismo nativo do Jenkins:
+Os dois containers são isolados, mas **montam o mesmo diretório de trabalho** do
+Jenkins (o *workspace*) através de um volume:
 
-1. O **container de build** roda `npm ci` + `npm run check` e, ao terminar com
-   sucesso, faz `stash` dos fontes já validados (`build-artifact`).
-2. O **container de teste**, recém-criado e limpo, faz `unstash 'build-artifact'`
-   e só então roda os testes.
+```
+docker run --rm -v "%CD%":/app -w /app node:22-alpine sh -c "..."
+```
+
+- `-v "%CD%":/app` monta o workspace do Jenkins (com os fontes baixados do
+  GitHub) dentro do container, em `/app`.
+- `-w /app` usa `/app` como diretório de trabalho — um caminho **Linux** válido.
+
+Assim, o container de build valida os fontes e o container de teste lê **esses
+mesmos fontes** pelo volume; ao final, o teste escreve `reports/junit.xml` e
+`reports/lcov.info` no workspace, e o Jenkins (no host) publica esses arquivos.
 
 ```mermaid
 sequenceDiagram
-    participant J as Jenkins
+    participant J as Jenkins (host)
     participant B as Container BUILD
     participant T as Container TESTE
-    J->>B: sobe node:22-alpine
+    J->>B: docker run ... node:22-alpine (monta o workspace em /app)
     B->>B: npm ci
     B->>B: npm run check (compila/valida)
-    B-->>J: stash "build-artifact"
-    Note over B: container descartado
-    J->>T: sobe node:22-alpine (novo)
-    J-->>T: unstash "build-artifact"
+    Note over B: container removido (--rm)
+    J->>T: docker run ... node:22-alpine (monta o mesmo workspace)
     T->>T: npm run test:coverage
-    T-->>J: reports/junit.xml + lcov.info
-    Note over T: container descartado
+    T-->>J: reports/junit.xml + lcov.info (no workspace)
+    Note over T: container removido (--rm)
     J->>J: publica JUnit e decide o resultado
 ```
 
-Esse fluxo é o que comprova, no log do Jenkins, que **o que foi construído em um
-container é exatamente o que foi testado no outro**.
+No log do Jenkins, cada container imprime o seu `hostname` (o ID do container).
+São **hostnames diferentes** — é isso que comprova que build e teste rodaram em
+containers separados.
 
 ---
 
-## 4. Por que "build" aqui é `npm ci` + `npm run check`
+## 4. Por que `docker run` explícito (e não `agent { docker }`)
+
+O Jenkins declarativo tem o açúcar sintático `agent { docker { image '...' } }`,
+fornecido pelo plugin *Docker Pipeline*. Ele é muito prático **em agentes
+Linux**, mas neste projeto o Jenkins roda em **Windows**. Nesse cenário o plugin
+monta o workspace usando o caminho do Windows e define o diretório de trabalho
+como `-w C:/...`, que **não é um caminho absoluto válido dentro de um container
+Linux** (`node:22-alpine`). O resultado é o erro:
+
+```
+docker: Error response from daemon: the working directory
+'C:/ProgramData/Jenkins/.../workspace/...' is invalid, it needs to be
+an absolute path
+```
+
+Para contornar isso de forma robusta, usamos `agent any` + `docker run`
+explícito, controlando nós mesmos o volume (`-v "%CD%":/app`) e o diretório de
+trabalho (`-w /app`, um caminho Linux válido). Continuam sendo **dois containers
+isolados** — só que comandados diretamente, sem depender do plugin.
+
+> Vantagem extra: como não dependemos do plugin Docker Pipeline, basta o **Docker
+> CLI** estar acessível ao Jenkins.
+
+---
+
+## 5. Por que "build" aqui é `npm ci` + `npm run check`
 
 Em Java o build é a compilação (`javac` / `mvn compile`). Em um projeto
 JavaScript puro não há bytecode para gerar, então o equivalente à compilação é:
@@ -121,30 +154,33 @@ compilação quebraria em Java — e é exatamente isso que o Cenário 2 explora
 
 ---
 
-## 5. Mapa dos 4 cenários nesta arquitetura
+## 6. Mapa dos 4 cenários nesta arquitetura
 
 | Cenário | O que acontece | Container que falha | Resultado |
 |--------|----------------|---------------------|-----------|
 | 1 — tudo certo | build e teste passam | nenhum | `SUCCESS` |
 | 2 — deu ruim | `npm run check` falha | **Build** (o Teste nem sobe) | `FAILURE` |
 | 3 — tá instável | build passa, um teste falha | **Teste** (via `catchError`) | `UNSTABLE` |
-| 4 — nightly | `cron('H 8 * * 1-5')` dispara sozinho | nenhum | `SUCCESS` |
+| 4 — nightly | `cron('* * * * *')` dispara sozinho | nenhum | `SUCCESS` |
 
-> Detalhe importante do Cenário 2: como o **stash** só acontece no `post { success }`
-> do build, se a compilação falha **o container de teste nem chega a ser criado**.
-> Isso deixa visível no pipeline que a falha foi na etapa de build.
+> Detalhe importante do Cenário 2: como o stage de build falha, o Jenkins **pula
+> o stage de teste** (`Stage "Test" skipped due to earlier failure(s)`). Ou seja,
+> o segundo `docker run` nem chega a ser executado — deixa visível que a falha
+> foi na etapa de build.
 
 ---
 
-## 6. Pré-requisitos na máquina do Jenkins
+## 7. Pré-requisitos na máquina do Jenkins
 
-Para os agentes `docker { ... }` funcionarem:
+- **Docker Desktop** instalado e em execução, no modo **Linux containers** (a
+  imagem usada é `node:22-alpine`, que é Linux).
+- **Docker CLI** acessível ao usuário/serviço que roda o Jenkins (no Windows,
+  basta o Docker Desktop estar rodando e o `docker` no PATH).
+- Plugin **Git** (para o checkout do repositório).
 
-- **Docker Desktop** instalado e em modo **Linux containers** (as imagens usadas
-  são `node:22-alpine`, que são Linux).
-- Plugin **Docker Pipeline** instalado no Jenkins.
-- O usuário que roda o serviço do Jenkins precisa ter permissão para falar com o
-  Docker (no Windows, basta o Docker Desktop estar rodando para o mesmo usuário).
+> Não é necessário o plugin *Docker Pipeline*: como subimos os containers com
+> `docker run`, só precisamos do Docker CLI.
 
 Os detalhes passo a passo de configuração e dos cenários estão em
-[jenkins-cenarios.md](jenkins-cenarios.md).
+[jenkins-cenarios.md](jenkins-cenarios.md), e o roteiro de gravação em
+[roteiro-video.pdf](roteiro-video.pdf).
