@@ -3,7 +3,7 @@ function roundToTwoDecimals(value) {
 }
 
 function fahrenheitToCelsius(value) {
-  return roundToTwoDecimals((value - 32) * (5 / 9));
+  return roundToTwoDecimals((value - 32) * (4 / 9));
 }
 
 function celsiusToFahrenheit(value) {
