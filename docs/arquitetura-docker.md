@@ -90,8 +90,12 @@ docker run --rm -v "%CD%":/app -w /app node:22-alpine sh -c "..."
 - `-w /app` usa `/app` como diretório de trabalho — um caminho **Linux** válido.
 
 Assim, o container de build valida os fontes e o container de teste lê **esses
-mesmos fontes** pelo volume; ao final, o teste escreve `reports/junit.xml` e
-`reports/lcov.info` no workspace, e o Jenkins (no host) publica esses arquivos.
+mesmos fontes** pelo volume. Os relatórios (`junit.xml` e `lcov.info`), porém,
+são gravados **dentro do container** (em `/tmp/reports`, via `REPORTS_DIR`) e
+extraídos pelo Jenkins com `docker cp`. Isso porque, no Windows, o serviço do
+Jenkins **não tem permissão de escrita no volume montado** (erro `EACCES`); o
+`docker cp` grava no workspace pela conta do próprio Jenkins, contornando o
+problema.
 
 ```mermaid
 sequenceDiagram
@@ -103,9 +107,9 @@ sequenceDiagram
     B->>B: npm run check (compila/valida)
     Note over B: container removido (--rm)
     J->>T: docker run ... node:22-alpine (monta o mesmo workspace)
-    T->>T: npm run test:coverage
-    T-->>J: reports/junit.xml + lcov.info (no workspace)
-    Note over T: container removido (--rm)
+    T->>T: npm run test:coverage (relatorios em /tmp/reports)
+    J->>T: docker cp /tmp/reports -> workspace
+    Note over T: container removido (docker rm)
     J->>J: publica JUnit e decide o resultado
 ```
 

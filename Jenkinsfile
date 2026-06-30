@@ -39,16 +39,27 @@ pipeline {
             steps {
                 echo 'Subindo o container #2 (teste), isolado do build...'
                 // Outro container (hostname diferente), montando o mesmo workspace.
+                // Os relatorios sao gravados DENTRO do container, em /tmp/reports
+                // (REPORTS_DIR), e nao no volume montado: o servico do Jenkins no
+                // Windows nao tem permissao de escrita no mount (EACCES). Roda sem
+                // --rm para depois extrairmos os relatorios com `docker cp`.
                 // catchError marca o build como UNSTABLE quando um caso de teste
                 // falha, sem abortar como FAILURE (Cenario 3).
                 catchError(buildResult: 'UNSTABLE', stageResult: 'UNSTABLE') {
-                    bat 'docker run --rm -v "%CD%":/app -w /app node:22-alpine sh -c "echo === TESTE === && hostname && npm run test:coverage"'
+                    bat 'docker run --name teste-%BUILD_NUMBER% -v "%CD%":/app -w /app -e REPORTS_DIR=/tmp/reports node:22-alpine sh -c "echo === TESTE === && hostname && npm run test:coverage"'
                 }
             }
             post {
                 always {
-                    // Os relatorios sao escritos no workspace montado, entao o
-                    // Jenkins (no host) consegue publica-los e arquiva-los.
+                    // Extrai os relatorios do container (mesmo se um teste falhou),
+                    // escrevendo no workspace pela conta do proprio Jenkins, e
+                    // remove o container. `exit 0` garante que o post prossiga.
+                    bat '''
+                        if exist reports rmdir /s /q reports
+                        docker cp teste-%BUILD_NUMBER%:/tmp/reports reports
+                        docker rm -f teste-%BUILD_NUMBER%
+                        exit 0
+                    '''
                     junit testResults: 'reports/junit.xml', allowEmptyResults: false
                     archiveArtifacts artifacts: 'reports/**', allowEmptyArchive: true
                 }
