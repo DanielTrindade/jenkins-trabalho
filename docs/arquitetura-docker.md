@@ -52,9 +52,7 @@ flowchart TD
     subgraph Docker["Docker Engine"]
         direction TB
         subgraph BuildC["Container #1 — BUILD (isolado)"]
-            B1[npm ci]
             B2[npm run check<br/>compilacao/sintaxe]
-            B1 --> B2
         end
         subgraph TestC["Container #2 — TESTE (isolado)"]
             T1[npm run test:coverage<br/>casos de teste]
@@ -103,7 +101,6 @@ sequenceDiagram
     participant B as Container BUILD
     participant T as Container TESTE
     J->>B: docker run ... node:22-alpine (monta o workspace em /app)
-    B->>B: npm ci
     B->>B: npm run check (compila/valida)
     Note over B: container removido (--rm)
     J->>T: docker run ... node:22-alpine (monta o mesmo workspace)
@@ -144,14 +141,16 @@ isolados** — só que comandados diretamente, sem depender do plugin.
 
 ---
 
-## 5. Por que "build" aqui é `npm ci` + `npm run check`
+## 5. Por que "build" aqui é `npm run check`
 
 Em Java o build é a compilação (`javac` / `mvn compile`). Em um projeto
-JavaScript puro não há bytecode para gerar, então o equivalente à compilação é:
+JavaScript puro não há bytecode para gerar, então o equivalente à compilação é o
+`npm run check` — rodar `node --check` em todos os fontes, que falha se houver
+erro de sintaxe (chave faltando, função mal fechada etc.).
 
-- `npm ci` — preparar o ambiente / instalar dependências a partir do lockfile;
-- `npm run check` — rodar `node --check` em todos os fontes, que falha se houver
-  erro de sintaxe (chave faltando, função mal fechada etc.).
+Como o projeto **não tem dependências externas**, não há `npm install`/`npm ci`:
+não existe nada para instalar, e rodá-lo só geraria escrita de `node_modules` no
+volume montado (lento e sem permissão no Jenkins em Windows).
 
 Ou seja, um **erro de sintaxe quebra o "build"** da mesma forma que um erro de
 compilação quebraria em Java — e é exatamente isso que o Cenário 2 explora.

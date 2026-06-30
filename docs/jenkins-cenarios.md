@@ -11,8 +11,7 @@ Execute o pipeline (job manual) com o código como está.
 
 Resultado esperado:
 
-- o **container de build** sobe (`docker run`), roda `npm ci` e `npm run check`
-  com sucesso;
+- o **container de build** sobe (`docker run`) e roda `npm run check` com sucesso;
 - o **container de teste** sobe separado (outro `docker run`), montando o mesmo
   workspace, e roda `npm run test:coverage` com sucesso;
 - o Jenkins publica `reports/junit.xml` e arquiva `reports/lcov.info`;

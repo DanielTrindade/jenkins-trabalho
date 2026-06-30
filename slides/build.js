@@ -368,7 +368,7 @@ async function s7() {
   s.addText("DOCKER ENGINE", { x: dx + 0.2, y: 2.02, w: 3, h: 0.28, fontFace: HEAD, fontSize: 9.5, color: C.blue, charSpacing: 1, bold: true, margin: 0 });
   s.addText("docker run", { x: dx + dw - 1.5, y: 2.02, w: 1.3, h: 0.28, fontFace: HEAD, fontSize: 9.5, color: C.muted, align: "right", margin: 0 });
   const cw = (dw - 0.9) / 2;
-  await node(dx + 0.25, cw, "cube", C.blue, "Container BUILD", "npm ci + npm run check", C.green);
+  await node(dx + 0.25, cw, "cube", C.blue, "Container BUILD", "npm run check", C.green);
   s.addImage({ data: await icon("arrow", "#8B949E"), x: dx + 0.25 + cw + 0.05, y: boxY + boxH / 2 - 0.16, w: 0.3, h: 0.3 });
   await node(dx + 0.25 + cw + 0.4, cw, "vial", C.amber, "Container TESTE", "npm run test:coverage", C.amber);
   s.addText("Dois docker run separados; os dois montam o mesmo workspace (-v) e são descartados (--rm).", {
@@ -403,14 +403,15 @@ async function s8() {
     t("  stage(", C.text), t("'Build'", C.green), t(") {\n", C.text),
     t("    bat ", C.purple), t("'docker run --rm -v \"%CD%\":/app -w /app\n", C.green),
     t("         node:22-alpine sh -c\n", C.green),
-    t("         \"npm ci && npm run check\"'\n", C.green),
+    t("         \"npm run check\"'\n", C.green),
     t("  }\n\n", C.text),
     t("  stage(", C.text), t("'Test'", C.green), t(") {\n", C.text),
     t("    catchError(", C.text), t("UNSTABLE", C.amber), t(") {\n", C.text),
-    t("      bat ", C.purple), t("'docker run --rm -v \"%CD%\":/app -w /app\n", C.green),
-    t("           node:22-alpine sh -c\n", C.green),
-    t("           \"npm run test:coverage\"'\n", C.green),
+    t("      bat ", C.purple), t("'docker run --name teste-%BUILD_NUMBER%\n", C.green),
+    t("        -v \"%CD%\":/app -e REPORTS_DIR=/tmp/reports\n", C.green),
+    t("        node:22-alpine sh -c \"npm run test:coverage\"'\n", C.green),
     t("    }\n", C.text),
+    t("    bat ", C.purple), t("'docker cp teste-..:/tmp/reports reports'", C.green), t("  ", C.text), t("// EACCES\n", C.muted),
     t("    junit ", C.blue), t("'reports/junit.xml'", C.green), t("\n", C.text),
     t("  }\n}", C.text),
   ], { fontSize: 11 });
@@ -674,7 +675,7 @@ async function s18() {
     tag: "tudo certo!", title: "Build e testes com sucesso", status: "SUCCESS", color: C.green,
     icon: "check", branch: "branch: conversion-cenario-build-sucesso",
     steps: [
-      ["cube", "2496ED", "1º docker run: container de BUILD roda npm ci + npm run check"],
+      ["cube", "2496ED", "1º docker run: container de BUILD valida a sintaxe (npm run check)"],
       ["box", "3FB950", "Os fontes ficam no workspace, montado nos dois containers (-v)"],
       ["vial", "D29922", "2º docker run: container de TESTE (outro hostname) roda os testes"],
       ["check", "3FB950", "9 testes passam → JUnit publicado, build verde"],

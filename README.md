@@ -21,7 +21,7 @@ flowchart TD
     subgraph Docker["Docker Engine"]
         direction TB
         subgraph BuildC["Container #1 — BUILD"]
-            B[npm ci<br/>npm run check]
+            B[npm run check]
         end
         subgraph TestC["Container #2 — TESTE"]
             T[npm run test:coverage]
@@ -37,8 +37,8 @@ flowchart TD
 
 **Como ler o diagrama:** o Jenkins não roda mais o `npm` no próprio agente. Cada
 etapa faz um `docker run` próprio: um container exclusivo para o **build**
-(`npm ci` + `npm run check`, o equivalente à "compilação" em um projeto JS) e,
-em seguida, um **segundo container, limpo e isolado**, para os **testes**. Os
+(`npm run check`, a "compilação" de um projeto JS sem dependências) e, em
+seguida, um **segundo container, limpo e isolado**, para os **testes**. Os
 dois montam o mesmo workspace (`-v "%CD%":/app -w /app`), então os fontes e os
 relatórios trafegam pelo volume. Assim, o que foi construído é exatamente o que
 é testado, mas em ambientes separados (hostnames diferentes no log comprovam o
@@ -125,9 +125,9 @@ Resposta:
 O [Jenkinsfile](Jenkinsfile) usa `agent any` e sobe um container Docker por etapa
 com `docker run` explícito:
 
-- **Stage Build (container #1):** `docker run ... node:22-alpine sh -c "npm ci &&
-  npm run check"` (validação de sintaxe = "compilação"). Se falhar, o stage de
-  teste é pulado.
+- **Stage Build (container #1):** `docker run ... node:22-alpine sh -c "npm run
+  check"` (validação de sintaxe = "compilação"; sem dependências, não há
+  `npm install`). Se falhar, o stage de teste é pulado.
 - **Stage Test (container #2):** outro `docker run` com `npm run test:coverage`,
   gerando `reports/junit.xml` e `reports/lcov.info`. Uma falha de teste é
   capturada com `catchError` e marca o build como `UNSTABLE`.
@@ -150,7 +150,7 @@ de gravar:
 
 ```bash
 # Etapa de build (container #1)
-docker run --rm -v "$PWD:/app" -w /app node:22-alpine sh -c "npm ci && npm run check"
+docker run --rm -v "$PWD:/app" -w /app node:22-alpine sh -c "npm run check"
 
 # Etapa de teste (container #2)
 docker run --rm -v "$PWD:/app" -w /app node:22-alpine sh -c "npm run test:coverage"

@@ -27,11 +27,14 @@ pipeline {
         stage('Build (container Docker)') {
             steps {
                 echo 'Subindo o container #1 (build)...'
-                // Container exclusivo de build: instala deps e "compila" (valida a
-                // sintaxe de todos os fontes). `hostname` imprime o ID do container.
-                // Se `npm run check` falhar, o passo retorna != 0 e o pipeline para
-                // antes do teste (Cenario 2).
-                bat 'docker run --rm -v "%CD%":/app -w /app node:22-alpine sh -c "echo === BUILD === && hostname && node --version && npm ci && npm run check"'
+                // Container exclusivo de build. O projeto NAO tem dependencias
+                // externas, entao a "compilacao" e' a validacao de sintaxe de
+                // todos os fontes (npm run check). Nao rodamos `npm ci` de
+                // proposito: sem deps ele so' geraria escrita de node_modules no
+                // volume montado (lento/sem permissao no Jenkins Windows).
+                // `hostname` imprime o ID do container; se o check falhar, o passo
+                // retorna != 0 e o pipeline para antes do teste (Cenario 2).
+                bat 'docker run --rm -v "%CD%":/app -w /app node:22-alpine sh -c "echo === BUILD === && hostname && node --version && npm run check"'
             }
         }
 
