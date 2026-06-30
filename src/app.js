@@ -158,7 +158,7 @@ function createTemperatureResponse(inputScale, outputScale, inputValue, outputVa
 function createApp() {
   const server = http.createServer((request, response) => {
     const requestUrl = new URL(request.url, "http://localhost");
-    const { pathname } = requestUrl;
+    const { pathname = requestUrl;
     const method = request.method ?? "GET";
     const baseUrl = `${requestUrl.protocol}//${request.headers.host ?? "localhost"}`;
 
