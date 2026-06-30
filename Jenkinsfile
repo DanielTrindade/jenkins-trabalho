@@ -14,8 +14,10 @@ pipeline {
     agent any
 
     triggers {
-        // Cenario 4 ("nightly"): build agendada de segunda a sexta, por volta das 8h.
-        cron('H 8 * * 1-5')
+        // Cenario 4 ("nightly") - VERSAO PARA DEMONSTRACAO.
+        // Dispara a cada minuto para gravar o job iniciando sozinho ("Started by
+        // timer"). Em producao voltaria para algo como 'H 8 * * 1-5'.
+        cron('* * * * *')
     }
 
     options {
