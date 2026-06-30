@@ -156,6 +156,11 @@ docker run --rm -v "$PWD:/app" -w /app node:22-alpine sh -c "npm run check"
 docker run --rm -v "$PWD:/app" -w /app node:22-alpine sh -c "npm run test:coverage"
 ```
 
-Os detalhes dos cenários para demonstração estão em
-[docs/jenkins-cenarios.md](docs/jenkins-cenarios.md) e o desenho completo da
-arquitetura em [docs/arquitetura-docker.md](docs/arquitetura-docker.md).
+Documentação de apoio:
+
+- Cenários para demonstração: [docs/jenkins-cenarios.md](docs/jenkins-cenarios.md)
+- Arquitetura completa: [docs/arquitetura-docker.md](docs/arquitetura-docker.md)
+- **Tutorial de setup + roteiro de gravação** (cenas e cenários):
+  [docs/roteiro-video.pdf](docs/roteiro-video.pdf)
+- **Roteiro de apresentação** (script teleprompter para o vídeo único do YouTube):
+  [docs/roteiro-apresentacao.pdf](docs/roteiro-apresentacao.pdf)
